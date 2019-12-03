@@ -76,6 +76,7 @@
       <RandomizedBaseAddress>
       </RandomizedBaseAddress>
       <ModuleDefinitionFile>Voukoder.def</ModuleDefinitionFile>
+      <TypeLibraryFile>voukoder.tlb</TypeLibraryFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -90,6 +91,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile />
       <DebugInformationFormat>None</DebugInformationFormat>
+      <ExpandAttributedSource>false</ExpandAttributedSource>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -102,20 +104,19 @@
       <RandomizedBaseAddress>
       </RandomizedBaseAddress>
       <ModuleDefinitionFile>Voukoder.def</ModuleDefinitionFile>
+      <TypeLibraryFile>voukoder.tlb</TypeLibraryFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ClassFactory.h" />
     <ClInclude Include="ComBase.h" />
     <ClInclude Include="CVoukoder.h" />
-    <ClInclude Include="IVoukoder.h" />
     <ClInclude Include="Registrar.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="Voukoder.h" />
+    <ClInclude Include="VoukoderTypeLib_h.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ClassFactory.cpp" />
-    <ClCompile Include="ComBase.cpp" />
     <ClCompile Include="CVoukoder.cpp" />
     <ClCompile Include="Voukoder.cpp" />
   </ItemGroup>
@@ -126,6 +127,11 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\Core\Core.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Midl Include="VoukoderTypeLib.idl">
+      <TypeLibraryName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(IntDir)voukoder.tlb</TypeLibraryName>
+    </Midl>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

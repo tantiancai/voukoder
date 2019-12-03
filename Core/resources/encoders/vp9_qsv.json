@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-04/schema#",
-  "id": "hevc_qsv",
-  "name": "HEVC (Intel QSV)",
+  "id": "vp9_qsv",
+  "name": "VP9 (Intel QSV)",
   "defaults": {},
   "groups": [
     {
@@ -50,23 +50,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": false
                         }
                       ]
@@ -86,23 +86,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": false
                         }
                       ]
@@ -118,23 +118,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": false
                         }
                       ]
@@ -153,23 +153,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": false
                         }
                       ]
@@ -185,23 +185,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": false
                         }
                       ]
@@ -217,23 +217,23 @@
                     "params": {
                       "ShowOptions": [
                         {
-                          "id": "hevc_qsv.standard.global_quality",
+                          "id": "vp9_qsv.standard.global_quality",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.bitrate",
+                          "id": "vp9_qsv.standard.bitrate",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.maxrate",
+                          "id": "vp9_qsv.standard.maxrate",
                           "visible": false
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_accuracy",
+                          "id": "vp9_qsv.standard.avbr_accuracy",
                           "visible": true
                         },
                         {
-                          "id": "hevc_qsv.standard.avbr_convergence",
+                          "id": "vp9_qsv.standard.avbr_convergence",
                           "visible": true
                         }
                       ]
@@ -262,7 +262,7 @@
           "forced": true,
           "control": {
             "type": "integer",
-            "minimum": 100,
+            "minimum": 0,
             "maximum": 288000,
             "singleStep": 1000,
             "value": 15000
@@ -350,13 +350,16 @@
                 "value": "unknown"
               },
               {
-                "value": "main"
+                "value": "profile0"
               },
               {
-                "value": "main10"
+                "value": "profile1"
               },
               {
-                "value": "mainsp"
+                "value": "profile2"
+              },
+              {
+                "value": "profile3"
               }
             ]
           }
@@ -470,33 +473,6 @@
           "control": {
             "type": "boolean",
             "value": true
-          }
-        },
-        {
-          "id": "idr_interval",
-          "parameter": "idr_interval",
-          "control": {
-            "maximum": 2147483647,
-            "minimum": 0,
-            "singleStep": 1,
-            "type": "integer",
-            "value": 0
-          }
-        },
-        {
-          "id": "gpb",
-          "parameter": "gpb",
-          "control": {
-            "type": "combobox",
-            "selectedIndex": 1,
-            "items": [
-              {
-                "value": "0"
-              },
-              {
-                "value": "1"
-              }
-            ]
           }
         }
       ]

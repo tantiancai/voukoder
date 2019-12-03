@@ -1,4 +1,5 @@
 #include "wxVoukoderDialog.h"
+#include <map>
 #include <wx/clipbrd.h>
 #include <wx/msw/registry.h>
 #include "EncoderUtils.h"
@@ -42,10 +43,6 @@ void wxVoukoderDialog::InitGUI()
 {
 	minLabelWidth = wxDLG_UNIT(this, wxSize(56, -1));
 
-	// Translate boolean options
-	wxPGGlobalVars->m_boolChoices[0].SetText(Trans("ui.encoderconfig.false"));
-	wxPGGlobalVars->m_boolChoices[1].SetText(Trans("ui.encoderconfig.true"));
-
 	wxBoxSizer* bDialogLayout = new wxBoxSizer(wxVERTICAL);
 
 	// Init image handlers
@@ -81,6 +78,10 @@ void wxVoukoderDialog::InitGUI()
 
 	wxListbook* m_Categories = new wxListbook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLB_DEFAULT);
 	m_Categories->AssignImageList(m_listbook1Images);
+
+	// Translate boolean options
+	wxPGGlobalVars->m_boolChoices[0].SetText(Trans("ui.encoderconfig.false"));
+	wxPGGlobalVars->m_boolChoices[1].SetText(Trans("ui.encoderconfig.true"));
 
 	// General panel
 	m_Categories->AddPage(CreateGeneralPanel(m_Categories), Trans("ui.encoderconfig.general"), true);
@@ -258,7 +259,7 @@ wxPanel* wxVoukoderDialog::CreateGeneralPanel(wxWindow* parent)
 	m_genMuxPanel->Layout();
 	sbGenMuxSizer->Fit(m_genMuxPanel);
 	bGenSizer->Add(m_genMuxPanel, 0, wxEXPAND | wxALL, 5);
-
+		
 	// General > ...
 
 	wxPanel* m_generalOtherPanel = new wxPanel(m_genPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
@@ -346,7 +347,7 @@ wxPanel* wxVoukoderDialog::CreateAboutPanel(wxWindow* parent)
 	aboutSizer->Add(m_headerPanel, 0, wxALIGN_CENTER | wxALL, 10);
 
 	// Authors
-	aboutSizer->Add(CreateCenteredText(panel, Trans("ui.encoderconfig.about.author"), wxT("Daniel Stankewitz")), 0, wxALIGN_CENTER | wxALL, 0);
+	aboutSizer->Add(CreateCenteredText(panel, Trans("ui.encoderconfig.about.author"), wxT("Daniel Stankewitz - @LordVouk"), wxT("https://twitter.com/LordVouk")), 0, wxALIGN_CENTER | wxALL, 0);
 	aboutSizer->Add(CreateCenteredText(panel, Trans("ui.encoderconfig.about.transmaint"), wxT("Bruno T. \"MyPOV\", Cedric R.")), 0, wxALIGN_CENTER | wxALL, 0);
 	aboutSizer->Add(CreateCenteredText(panel, Trans("ui.encoderconfig.about.logo"), wxT("Noar")), 0, wxALIGN_CENTER | wxALL, 0);
 	aboutSizer->Add(CreateCenteredText(panel, Trans("ui.encoderconfig.about.awesomefont"), wxT("Dave Gandy / CC 3.0 BY")), 0, wxALIGN_CENTER | wxALL, 0);
@@ -358,8 +359,12 @@ wxPanel* wxVoukoderDialog::CreateAboutPanel(wxWindow* parent)
 	aboutSizer->Add(m_label, 0, wxALIGN_LEFT | wxALL, 10);
 	aboutSizer->Add(CreateTopPatrons(panel), 1, wxEXPAND | wxALL, 10);
 
-	wxHyperlinkCtrl *m_hyperlink1 = new wxHyperlinkCtrl(panel, wxID_ANY, Trans("ui.encoderconfig.about.support.patreon"), wxT("https://www.patreon.com/voukoder"), wxDefaultPosition, wxDefaultSize, wxHL_DEFAULT_STYLE);
-	aboutSizer->Add(m_hyperlink1, 0, wxALIGN_CENTER | wxALL, 5);
+	wxBoxSizer* bSizerSupport = new wxBoxSizer(wxHORIZONTAL);
+	wxHyperlinkCtrl* m_hyperlink1 = new wxHyperlinkCtrl(panel, wxID_ANY, Trans("ui.encoderconfig.about.support.patreon"), wxT("https://www.patreon.com/voukoder"), wxDefaultPosition, wxDefaultSize, wxHL_DEFAULT_STYLE);
+	bSizerSupport->Add(m_hyperlink1, 0, wxALL, 5);
+	wxHyperlinkCtrl* m_hyperlink2 = new wxHyperlinkCtrl(panel, wxID_ANY, Trans("ui.encoderconfig.about.support.paypal"), wxT("https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=S6LGDW9QZYBTL&source=url"), wxDefaultPosition, wxDefaultSize, wxHL_DEFAULT_STYLE);
+	bSizerSupport->Add(m_hyperlink2, 0, wxALL, 5);
+	aboutSizer->Add(bSizerSupport, 0, wxALIGN_CENTER, 0);
 
 	panel->SetSizer(aboutSizer);
 	panel->Layout();
@@ -425,7 +430,7 @@ wxRichTextCtrl* wxVoukoderDialog::CreateTopPatrons(wxPanel* parent)
 	return richText;
 }
 
-wxPanel* wxVoukoderDialog::CreateCenteredText(wxPanel* parent, wxString label, wxString text)
+wxPanel* wxVoukoderDialog::CreateCenteredText(wxPanel* parent, wxString label, wxString text, wxString link)
 {
 	wxPanel* m_panel = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL);
 	wxBoxSizer* bSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -435,9 +440,18 @@ wxPanel* wxVoukoderDialog::CreateCenteredText(wxPanel* parent, wxString label, w
 	m_label->Wrap(-1);
 	bSizer->Add(m_label, 1, wxALL, 5);
 
-	wxStaticText* m_text = new wxStaticText(m_panel, wxID_ANY, text, wxDefaultPosition, wxDefaultSize, 0);
-	m_text->Wrap(-1);
-	bSizer->Add(m_text, 1, wxALL, 5);
+	if (link.IsEmpty())
+	{
+		wxStaticText* m_text = new wxStaticText(m_panel, wxID_ANY, text, wxDefaultPosition, wxDefaultSize, 0);
+		m_text->Wrap(-1);
+		bSizer->Add(m_text, 1, wxALL, 5);
+	}
+	else
+	{
+		wxHyperlinkCtrl* m_hyperlink1 = new wxHyperlinkCtrl(m_panel, wxID_ANY, text, link, wxDefaultPosition, wxDefaultSize, wxHL_DEFAULT_STYLE);
+		m_hyperlink1->SetToolTip(link);
+		bSizer->Add(m_hyperlink1, 1, wxALL, 5);
+	}
 
 	m_panel->SetSizer(bSizer);
 	m_panel->Layout();
@@ -613,7 +627,9 @@ void wxVoukoderDialog::OnMuxerChanged(wxCommandEvent& event)
 	m_genMuxFaststartCheck->Enable(info->capabilities.faststart);
 
 	// Disable faststart if it is not supported
-	if (!info->capabilities.faststart)
+	if (info->capabilities.faststart)
+		m_genMuxFaststartCheck->SetValue(exportInfo.format.faststart);
+	else
 		m_genMuxFaststartCheck->SetValue(false);
 }
 
@@ -625,17 +641,11 @@ void wxVoukoderDialog::OnOkayClick(wxCommandEvent& event)
 		EncoderInfo* info = GetDataFromSelectedChoice<EncoderInfo*>(m_genEncVideoChoice);
 		exportInfo.video.id = info->id;
 
-		// Copy pixel format
-		if (videoSettings.options.find("_pixelFormat") != videoSettings.options.end())
-			exportInfo.video.pixelFormat = av_get_pix_fmt(videoSettings.options.at("_pixelFormat").c_str());
-		else if (info->defaults.find("_pixelFormat") != info->defaults.end())
-			exportInfo.video.pixelFormat = av_get_pix_fmt(info->defaults.at("_pixelFormat").c_str());
-		else
-			exportInfo.video.pixelFormat = AV_PIX_FMT_YUV420P;
-
 		// Copy options
 		exportInfo.video.options.clear();
-		exportInfo.video.options.insert(videoSettings.options.begin(), videoSettings.options.end());
+		exportInfo.video.options.insert(info->defaults.begin(), info->defaults.end());
+		for (auto item : videoSettings.options)
+			exportInfo.video.options[item.first] = item.second;
 
 		// Copy side data
 		exportInfo.video.sideData.clear();
@@ -651,17 +661,11 @@ void wxVoukoderDialog::OnOkayClick(wxCommandEvent& event)
 		EncoderInfo* info = GetDataFromSelectedChoice<EncoderInfo*>(m_genEncAudioChoice);
 		exportInfo.audio.id = info->id;
 
-		// Copy sample format
-		if (audioSettings.options.find("_sampleFormat") != audioSettings.options.end())
-			exportInfo.audio.sampleFormat = av_get_sample_fmt(audioSettings.options.at("_sampleFormat").c_str());
-		else if (info->defaults.find("_sampleFormat") != info->defaults.end())
-			exportInfo.audio.sampleFormat = av_get_sample_fmt(info->defaults.at("_sampleFormat").c_str());
-		else
-			exportInfo.audio.sampleFormat = AV_SAMPLE_FMT_FLTP;
-
 		// Copy options
 		exportInfo.audio.options.clear();
-		exportInfo.audio.options.insert(audioSettings.options.begin(), audioSettings.options.end());
+		exportInfo.audio.options.insert(info->defaults.begin(), info->defaults.end());
+		for (auto item : audioSettings.options)
+			exportInfo.audio.options[item.first] = item.second;
 
 		// Copy side data
 		exportInfo.audio.sideData.clear();

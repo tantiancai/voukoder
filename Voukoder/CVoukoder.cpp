@@ -1,7 +1,6 @@
 #include "CVoukoder.h"
 #include "../Core/wxVoukoderDialog.h"
 
-#ifdef _DEBUG
 static inline void AvCallback(void*, int level, const char* szFmt, va_list varg)
 {
 	char logbuf[2000];
@@ -10,7 +9,36 @@ static inline void AvCallback(void*, int level, const char* szFmt, va_list varg)
 
 	OutputDebugStringA(logbuf);
 }
-#endif
+
+struct handle_data {
+	unsigned long process_id;
+	HWND window_handle;
+};
+
+BOOL IsMainWindow(HWND handle)
+{
+	return GetWindow(handle, GW_OWNER) == (HWND)0 && IsWindowVisible(handle);
+}
+
+BOOL CALLBACK EnumWindowsCallback(HWND handle, LPARAM lParam)
+{
+	handle_data& data = *(handle_data*)lParam;
+	unsigned long process_id = 0;
+	GetWindowThreadProcessId(handle, &process_id);
+	if (data.process_id != process_id || !IsMainWindow(handle))
+		return TRUE;
+	data.window_handle = handle;
+	return FALSE;
+}
+
+HWND FindMainWindow(unsigned long process_id)
+{
+	handle_data data;
+	data.process_id = process_id;
+	data.window_handle = 0;
+	EnumWindows(EnumWindowsCallback, (LPARAM)&data);
+	return data.window_handle;
+}
 
 class actctx_activator
 {
@@ -31,13 +59,19 @@ public:
 	}
 };
 
-CVoukoder::CVoukoder():
-	aPts(0), vPts(0)
+CVoukoder::CVoukoder()
 {
-#ifdef _DEBUG
-	av_log_set_level(AV_LOG_TRACE);
+	av_log_set_level(AV_LOG_DEBUG);
 	av_log_set_callback(AvCallback);
-#endif
+
+	// Add window title to log
+	wchar_t text[256];
+	HWND hwnd = FindMainWindow(GetCurrentProcessId());
+	if (GetWindowText(hwnd, text, sizeof(text)))
+	{
+		vkLogInfo(wxString::Format("Plugin running in %s", text));
+		vkLogSep();
+	}
 }
 
 CVoukoder::~CVoukoder()
@@ -55,168 +89,201 @@ STDMETHODIMP CVoukoder::QueryInterface(REFIID riid, LPVOID *ppv)
 	return E_NOINTERFACE;
 }
 
-STDMETHODIMP_(void) CVoukoder::SetConfig(Voukoder::CONFIG& config)
+STDMETHODIMP CVoukoder::SetConfig(VKENCODERCONFIG config)
 {
-	// Video
+	// Standard fields
 	exportInfo.video.id = config.video.encoder;
 	exportInfo.video.options.Deserialize(config.video.options);
 	exportInfo.video.filters.Deserialize(config.video.filters);
 	exportInfo.video.sideData.Deserialize(config.video.sidedata);
-
-	if (wcslen(config.video.format) == 0)
-	{
-		if (exportInfo.video.options.find("_pixelFormat") != exportInfo.video.options.end())
-			exportInfo.video.pixelFormat = av_get_pix_fmt(exportInfo.video.options.at("_pixelFormat").c_str());
-	}
-	else
-		exportInfo.video.pixelFormat = av_get_pix_fmt(wxString(config.video.format));
-
-	// Audio
 	exportInfo.audio.id = config.audio.encoder;
 	exportInfo.audio.options.Deserialize(config.audio.options);
 	exportInfo.audio.filters.Deserialize(config.audio.filters);
 	exportInfo.audio.sideData.Deserialize(config.audio.sidedata);
-
-	if (wcslen(config.audio.format) == 0)
-	{
-		if (exportInfo.audio.options.find("_sampleFormat") != exportInfo.audio.options.end())
-			exportInfo.audio.sampleFormat = av_get_sample_fmt(exportInfo.audio.options.at("_sampleFormat").c_str());
-	}
-	else
-		exportInfo.audio.sampleFormat = av_get_sample_fmt(wxString(config.audio.format));
-
-	// Format
 	exportInfo.format.id = config.format.container;
 	exportInfo.format.faststart = config.format.faststart;
+	exportInfo.video.colorRange = AVColorRange::AVCOL_RANGE_UNSPECIFIED;
+	exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_UNSPECIFIED;
+	exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_UNSPECIFIED;
+	exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_UNSPECIFIED;
 
-	// Multipass encoding
-	if (exportInfo.video.options.find("_2pass") != exportInfo.video.options.end())
+	// Deal with color spaces
+	for(const auto & options: exportInfo.video.filters)
 	{
-		if (exportInfo.video.options.at("_2pass") == "1")
-			exportInfo.passes = 2;
-	}
-	else
-		exportInfo.passes = 1;
-
-	// Refresh config (not so nice, but helps with format and stuff ..)
-	GetConfig(&config);
-}
-
-STDMETHODIMP_(void) CVoukoder::GetConfig(Voukoder::CONFIG* config)
-{
-	config->version = VOUKODER_CONFIG_VERSION;
-
-	// Video
-	wcscpy_s(config->video.encoder, exportInfo.video.id);
-	wcscpy_s(config->video.options, exportInfo.video.options.Serialize(true));
-	wcscpy_s(config->video.filters, exportInfo.video.filters.Serialize());
-	wcscpy_s(config->video.sidedata, exportInfo.video.sideData.Serialize(true));
-	const char* vformat = av_get_pix_fmt_name(exportInfo.video.pixelFormat);
-	mbstowcs(config->video.format, vformat, strlen(vformat));
-
-	// Audio
-	wcscpy_s(config->audio.encoder, exportInfo.audio.id);
-	wcscpy_s(config->audio.options, exportInfo.audio.options.Serialize(true));
-	wcscpy_s(config->audio.filters, exportInfo.audio.filters.Serialize());
-	wcscpy_s(config->audio.sidedata, exportInfo.audio.sideData.Serialize(true));
-	const char* aformat = av_get_sample_fmt_name(exportInfo.audio.sampleFormat);
-	mbstowcs(config->audio.format, aformat, strlen(aformat));
-	
-	// Format
-	wcscpy_s(config->format.container, exportInfo.format.id);
-	config->format.faststart = exportInfo.format.faststart;
-}
-
-STDMETHODIMP_(void) CVoukoder::GetAudioChunkSize(int* chunkSize)
-{
-	*chunkSize = encoder->getAudioFrameSize();
-}
-
-STDMETHODIMP_(bool) CVoukoder::GetFileExtension(std::wstring& extension)
-{
-	for (auto info : Voukoder::Config::Get().muxerInfos)
-	{
-		if (info.id == exportInfo.format.id)
+		if (options->id == "filter.colorspace" &&
+			options->find("range") != options->end() &&
+			options->find("space") != options->end() &&
+			options->find("primaries") != options->end() &&
+			options->find("trc") != options->end())
 		{
-			extension = info.extension;
-			return true;
+			// Color range
+			auto range = options->at("range");
+			exportInfo.video.colorRange = (AVColorRange)av_color_range_from_name(range.c_str());
+			if (exportInfo.video.colorRange == AVColorRange::AVCOL_RANGE_UNSPECIFIED)
+				vkLogInfoVA("Unknown color range supplied: %s", range.c_str());
+
+			// Color space
+			auto space = options->at("space");
+			if (space == "bt709")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT709;
+			else if (space == "fcc")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_FCC;
+			else if (space == "bt470bg")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT470BG;
+			else if (space == "smpte170m")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_SMPTE170M;
+			else if (space == "smpte240m")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_SMPTE240M;
+			else if (space == "ycgco")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_YCGCO;
+			else if (space == "gbr")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_RGB;
+			else if (space == "bt2020nc")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT2020_NCL;
+			else if (space == "bt2020ncl")
+				exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT2020_NCL;
+			else
+				vkLogInfoVA("Unknown color space supplied: %s", space.c_str());
+
+			// Color primaries
+			auto primaries = options->at("primaries");
+			if (primaries == "bt709")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT709;
+			else if (primaries == "bt470m")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT470M;
+			else if (primaries == "bt470bg")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT470BG;
+			else if (primaries == "smpte170m")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE170M;
+			else if (primaries == "smpte240m")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE240M;
+			else if (primaries == "smpte428")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE428;
+			else if (primaries == "film")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_FILM;
+			else if (primaries == "smpte431")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE431;
+			else if (primaries == "smpte432")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE432;
+			else if (primaries == "bt2020")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT2020;
+			else if (primaries == "jedec-p22")
+				exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_JEDEC_P22;
+			else
+				vkLogInfoVA("Unknown color primaries supplied: %s", primaries.c_str());
+
+			// Color transfer
+			auto trc = options->at("trc");
+			if (trc == "bt709")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_BT709;
+			else if (trc == "bt470m")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_GAMMA22;
+			else if (trc == "bt470bg")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_GAMMA28;
+			else if (trc == "gamma22")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_GAMMA22;
+			else if (trc == "gamma28")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_GAMMA28;
+			else if (trc == "smpte170m")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_SMPTE170M;
+			else if (trc == "smpte240m")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_SMPTE240M;
+			else if (trc == "srgb")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_IEC61966_2_1;
+			else if (trc == "iec61966-2-1")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_IEC61966_2_1;
+			else if (trc == "iec61966-2-4")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_IEC61966_2_4;
+			else if (trc == "xvycc")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_IEC61966_2_4;
+			else if (trc == "bt2020-10")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_BT2020_10;
+			else if (trc == "bt2020-12")
+				exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_BT2020_12;
+			else
+				vkLogInfoVA("Unknown color transfer supplied: %s", trc.c_str());
 		}
 	}
 
-	return false;
+	return S_OK;
 }
 
-STDMETHODIMP_(int) CVoukoder::GetMaxPasses()
+STDMETHODIMP CVoukoder::GetConfig(VKENCODERCONFIG* config)
 {
-	return exportInfo.passes;
+	strcpy_s(config->video.encoder, exportInfo.video.id.mb_str());
+	strcpy_s(config->video.options, exportInfo.video.options.Serialize(true).mb_str());
+	strcpy_s(config->video.filters, exportInfo.video.filters.Serialize().mb_str());
+	strcpy_s(config->video.sidedata, exportInfo.video.sideData.Serialize(true).mb_str());
+	strcpy_s(config->audio.encoder, exportInfo.audio.id.mb_str());
+	strcpy_s(config->audio.options, exportInfo.audio.options.Serialize(true).mb_str());
+	strcpy_s(config->audio.filters, exportInfo.audio.filters.Serialize().mb_str());
+	strcpy_s(config->audio.sidedata, exportInfo.audio.sideData.Serialize(true).mb_str());
+	strcpy_s(config->format.container, exportInfo.format.id.mb_str());
+	config->format.faststart = exportInfo.format.faststart;
+	config->version = 1;
+
+	return S_OK;
 }
 
-STDMETHODIMP_(bool) CVoukoder::Open(Voukoder::INFO info)
+STDMETHODIMP CVoukoder::GetFileExtension(BSTR* extension)
 {
-	// Replace file extension if necessary
-	std::wstring fname(info.filename);
-	std::wstring::size_type i = fname.rfind('.', fname.length());
 	for (auto info : Voukoder::Config::Get().muxerInfos)
 	{
 		if (info.id == exportInfo.format.id)
 		{
-			if (i != std::wstring::npos)
-			{
-				fname.replace(i + 1, info.extension.length(), info.extension);
-				break;
-			}
+			*extension = SysAllocString(info.extension);
+
+			return S_OK;
+		}
+	}
+
+	return E_FAIL;
+}
+
+STDMETHODIMP CVoukoder::GetMaxPasses(UINT* passes)
+{
+	*passes = exportInfo.passes;
+
+	return S_OK;
+}
+
+STDMETHODIMP CVoukoder::Open(VKENCODERINFO info)
+{
+	vkLogSep();
+	vkLogInfo("Export started");
+	vkLogSep();
+
+	// Replace file extension if necessary (req'd for vegas)
+	wxString filename(info.filename);
+	for (auto info : Voukoder::Config::Get().muxerInfos)
+	{
+		if (info.id == exportInfo.format.id)
+		{
+			filename = filename.BeforeLast('.') + "." + info.extension;
+			break;
 		}
 	}
 
 	// Set non-stored export settings
-	exportInfo.filename = fname;
-	exportInfo.application = info.application;
+	exportInfo.filename = filename;
+	exportInfo.application = wxString::Format("%s (%s)", VKDR_APPNAME, std::wstring(info.application));
 	exportInfo.video.enabled = info.video.enabled;
 	exportInfo.video.width = info.video.width;
 	exportInfo.video.height = info.video.height;
-	exportInfo.video.timebase = { (int)info.video.timebase.num, (int)info.video.timebase.den };
-	exportInfo.video.sampleAspectRatio = { (int)info.video.aspectratio.num, (int)info.video.aspectratio.den };
+	exportInfo.video.timebase = { info.video.timebase.num, info.video.timebase.den };
+	exportInfo.video.sampleAspectRatio = { info.video.aspectratio.num, info.video.aspectratio.den };
 
 	// Video field order
 	switch (info.video.fieldorder)
 	{
-	case Voukoder::FieldOrder::Top:
+	case FieldOrder::Top:
 		exportInfo.video.fieldOrder = AV_FIELD_TT;
 		break;
-	case Voukoder::FieldOrder::Bottom:
+	case FieldOrder::Bottom:
 		exportInfo.video.fieldOrder = AV_FIELD_BB;
 		break;
 	default:
 		exportInfo.video.fieldOrder = AV_FIELD_PROGRESSIVE;
-	}
-
-	exportInfo.video.colorRange = info.video.colorRange == Voukoder::ColorRange::Full ? AVColorRange::AVCOL_RANGE_JPEG : AVColorRange::AVCOL_RANGE_MPEG;
-
-	// Video color space
-	switch (info.video.colorSpace)
-	{
-	case Voukoder::ColorSpace::bt709:
-		exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT709;
-		exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT709;
-		exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_BT709;
-		break;
-	case Voukoder::ColorSpace::bt601_PAL:
-		exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT470BG;
-		exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT470BG;
-		exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_GAMMA28;
-	case Voukoder::ColorSpace::bt601_NTSC:
-		exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_SMPTE170M;
-		exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_SMPTE170M;
-		exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_SMPTE170M;
-	case Voukoder::ColorSpace::bt2020_CL:
-		exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT2020_CL;
-		exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT2020;
-		exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_SMPTE2084;
-	case Voukoder::ColorSpace::bt2020_NCL:
-		exportInfo.video.colorSpace = AVColorSpace::AVCOL_SPC_BT2020_NCL;
-		exportInfo.video.colorPrimaries = AVColorPrimaries::AVCOL_PRI_BT2020;
-		exportInfo.video.colorTransferCharacteristics = AVColorTransferCharacteristic::AVCOL_TRC_SMPTE2084;
-		break;
 	}
 
 	exportInfo.audio.enabled = info.audio.enabled;
@@ -225,13 +292,13 @@ STDMETHODIMP_(bool) CVoukoder::Open(Voukoder::INFO info)
 	// Audio channel layout
 	switch (info.audio.channellayout)
 	{
-	case Voukoder::ChannelLayout::Mono:
+	case ChannelLayout::Mono:
 		exportInfo.audio.channelLayout = AV_CH_LAYOUT_MONO;
 		break;
-	case Voukoder::ChannelLayout::Stereo:
+	case ChannelLayout::Stereo:
 		exportInfo.audio.channelLayout = AV_CH_LAYOUT_STEREO;
 		break;
-	case Voukoder::ChannelLayout::FivePointOne:
+	case ChannelLayout::FivePointOne:
 		if (exportInfo.audio.id == "dca")
 			exportInfo.audio.channelLayout = AV_CH_LAYOUT_5POINT1; //Use 5.1(side) when dts audio is selected
 		else
@@ -239,15 +306,78 @@ STDMETHODIMP_(bool) CVoukoder::Open(Voukoder::INFO info)
 		break;
 	}
 
+	// Multipass encoding
+	if (exportInfo.video.enabled && exportInfo.video.options.find("_2pass") != exportInfo.video.options.end())
+	{
+		if (exportInfo.video.options.at("_2pass") == "1")
+			exportInfo.passes = 2;
+	}
+	else
+		exportInfo.passes = 1;
+
+	// Dump
+	vkLogInfoVA("Filename:        %s", exportInfo.filename);
+	vkLogInfoVA("Application:     %s", exportInfo.application);
+	vkLogInfoVA("Passes:          %d", exportInfo.passes);
+
+	// Video
+	if (exportInfo.video.enabled)
+	{
+		vkLogInfo("- Video -------------------------------------");
+		vkLogInfoVA("Frame size:      %dx%d", exportInfo.video.width, exportInfo.video.height);
+		vkLogInfoVA("Pixel aspect:    %d:%d", exportInfo.video.sampleAspectRatio.num, exportInfo.video.sampleAspectRatio.den);
+		vkLogInfoVA("Timebase:        %d/%d (%.2f fps)", exportInfo.video.timebase.num, exportInfo.video.timebase.den, ((float)exportInfo.video.timebase.den / (float)exportInfo.video.timebase.num));
+
+		// Log field order
+		switch (info.video.fieldorder)
+		{
+		case FieldOrder::Progressive:
+			vkLogInfo("Interlaced:      No");
+			break;
+		case FieldOrder::Bottom:
+			vkLogInfo("Interlaced:      Bottom first");
+			break;
+		case FieldOrder::Top:
+			vkLogInfo("Interlaced:      Top first");
+			break;
+		}
+
+		vkLogInfoVA("Encoder:         %s", exportInfo.video.id);
+		vkLogInfoVA("Options:         %s", exportInfo.video.options.Serialize(true, "", ' '));
+		vkLogInfoVA("Side data:       %s", exportInfo.video.sideData.Serialize(true, "", ' '));
+		vkLogInfoVA("Filters:         %s", exportInfo.video.filters.Serialize());
+		vkLogInfoVA("Color range:     %s", av_color_range_name(exportInfo.video.colorRange));
+		vkLogInfoVA("Color space:     %s", av_color_space_name(exportInfo.video.colorSpace));
+		vkLogInfoVA("Color primaries: %s", av_color_primaries_name(exportInfo.video.colorPrimaries));
+		vkLogInfoVA("Color transfer:  %s", av_color_transfer_name(exportInfo.video.colorTransferCharacteristics));
+	}
+
+	// Audio
+	if (exportInfo.audio.enabled)
+	{
+		vkLogInfo("- Audio -------------------------------------");
+		vkLogInfoVA("Timebase:        %d/%d", exportInfo.audio.timebase.num, exportInfo.audio.timebase.den);
+		vkLogInfoVA("Channels:        %s", av_get_channel_description(exportInfo.audio.channelLayout));
+		vkLogInfoVA("Encoder:         %s", exportInfo.audio.id);
+		vkLogInfoVA("Options:         %s", exportInfo.audio.options.Serialize(true, "", ' '));
+		vkLogInfoVA("Side data:       %s", exportInfo.audio.sideData.Serialize(true, "", ' '));
+		vkLogInfoVA("Filters:         %s", exportInfo.audio.filters.Serialize());
+	}
+
+	vkLogSep();
+
 	// Create encoder instance
 	encoder = new EncoderEngine(exportInfo);
 	if (encoder->open() < 0)
-		return false;
+	{
+		vkLogInfo("Opening encoder failed! Aborting ...")
+		return E_FAIL;
+	}
 
-	return true;
+	return S_OK;
 }
 
-STDMETHODIMP_(void) CVoukoder::Close(bool finalize)
+STDMETHODIMP CVoukoder::Close(BOOL finalize)
 {
 	if (encoder)
 	{
@@ -258,54 +388,60 @@ STDMETHODIMP_(void) CVoukoder::Close(bool finalize)
 
 		delete encoder;
 	}
+
+	vkLogSep();
+	vkLogInfo("Export finished");
+	vkLogSep();
+
+	return S_OK;
 }
 
-STDMETHODIMP_(void) CVoukoder::Log(std::wstring text, ...)
+STDMETHODIMP CVoukoder::Log(BSTR text)
 {
-	wchar_t log[1024];
+	vkLogInfo(std::wstring(text, SysStringLen(text)));
 
-	va_list args;
-	va_start(args, log);
-	vswprintf_s(log, text.c_str(), args);
-	va_end(args);
-
-	vkLogInfo(log);
+	return S_OK;
 }
 
-STDMETHODIMP_(bool) CVoukoder::IsAudioActive()
+STDMETHODIMP CVoukoder::IsAudioActive(BOOL* isActive)
 {
-	return encoder->hasAudio();
+	*isActive = encoder->hasAudio();
+
+	return S_OK;
 }
 
-STDMETHODIMP_(bool) CVoukoder::IsAudioWaiting()
+STDMETHODIMP CVoukoder::IsAudioWaiting(BOOL* isWaiting)
 {
-	return encoder->hasAudio() &&
-		(av_compare_ts(vPts, exportInfo.video.timebase, aPts, exportInfo.audio.timebase) > 0);
+	*isWaiting = encoder->hasAudio() && encoder->getNextFrameType() == AVMEDIA_TYPE_AUDIO;
+
+	return S_OK;
 }
 
-STDMETHODIMP_(bool) CVoukoder::IsVideoActive()
+STDMETHODIMP CVoukoder::IsVideoActive(BOOL* isActive)
 {
-	return encoder->hasVideo();
+	*isActive = encoder->hasVideo();
+	
+	return S_OK;
 }
 
-STDMETHODIMP_(bool) CVoukoder::SendAudioSampleChunk(uint8_t** buffer, int samples, int blockSize, int planes, int sampleRate, Voukoder::ChannelLayout layout, const char* format)
+STDMETHODIMP CVoukoder::SendAudioSampleChunk(VKAUDIOCHUNK chunk)
 {
-	assert(planes <= AV_NUM_DATA_POINTERS);
+	assert(chunk.planes <= AV_NUM_DATA_POINTERS);
 
 	AVFrame* frame = av_frame_alloc();
-	frame->format = av_get_sample_fmt(format);
-	frame->sample_rate = sampleRate;
-	frame->nb_samples = samples;
+	frame->format = av_get_sample_fmt(chunk.format);
+	frame->sample_rate = chunk.sampleRate;
+	frame->nb_samples = chunk.samples;
 
-	switch (layout)
+	switch (chunk.layout)
 	{
-	case Voukoder::ChannelLayout::Mono:
+	case ChannelLayout::Mono:
 		frame->channel_layout = AV_CH_LAYOUT_MONO;
 		break;
-	case Voukoder::ChannelLayout::Stereo:
+	case ChannelLayout::Stereo:
 		frame->channel_layout = AV_CH_LAYOUT_STEREO;
 		break;
-	case Voukoder::ChannelLayout::FivePointOne:
+	case ChannelLayout::FivePointOne:
 		if (exportInfo.audio.id == "dca")
 			frame->channel_layout = AV_CH_LAYOUT_5POINT1; //Use 5.1(side) when dts audio is selected
 		else
@@ -316,72 +452,66 @@ STDMETHODIMP_(bool) CVoukoder::SendAudioSampleChunk(uint8_t** buffer, int sample
 	frame->channels = av_get_channel_layout_nb_channels(frame->channel_layout);
 
 	// Fill each plane
-	for (int p = 0; p < planes; p++)
+	for (int p = 0; p < chunk.planes; p++)
 	{
-		frame->data[p] = buffer[p];
-		frame->linesize[p] = samples * blockSize;
+		frame->data[p] = chunk.buffer[p];
+		frame->linesize[p] = chunk.samples * chunk.blockSize;
 	}
 
-	frame->pts = aPts;
-
-	aPts += frame->nb_samples;
-
-	bool ret = encoder->writeAudioFrame(frame) == 0;
+	HRESULT hr = encoder->writeAudioFrame(frame) == 0 ? S_OK : E_FAIL;
 
 	av_frame_free(&frame);
 
-	return ret;
+	return hr;
 }
 
-STDMETHODIMP_(bool) CVoukoder::SendVideoFrame(int64_t idx, uint8_t** buffer, int* rowsize, int planes, int width, int height, int pass, const char* format)
+STDMETHODIMP CVoukoder::SendVideoFrame(VKVIDEOFRAME frame)
 {
-	assert(planes <= AV_NUM_DATA_POINTERS);
+	assert(frame.planes <= AV_NUM_DATA_POINTERS);
 
 	// Multipass
-	if (pass > encoder->pass)
+	if (frame.pass > encoder->pass)
 	{
 		// Close current encoding pass
 		encoder->finalize();
 		encoder->close();
 
 		// Set new pass
-		encoder->pass = pass;
+		encoder->pass = frame.pass;
 
 		// Start new pass
 		if (encoder->open() < 0)
 		{
-			//gui->ReportMessage(wxString::Format("Unable to start pass #%d", encoder.pass));
-			return false;
+			vkLogErrorVA("Unable to start pass #%d", encoder->pass);
+			return E_FAIL;
 		}
 	}
 
 	// Fill frame
-	AVFrame* frame = av_frame_alloc();
-	frame->width = width;
-	frame->height = height;
-	frame->format = av_get_pix_fmt(format);
-	frame->color_range = AVColorRange::AVCOL_RANGE_MPEG;
-	frame->colorspace = AVColorSpace::AVCOL_SPC_BT709;
-	frame->color_primaries = AVColorPrimaries::AVCOL_PRI_BT709;
-	frame->color_trc = AVColorTransferCharacteristic::AVCOL_TRC_BT709;
+	AVFrame* f = av_frame_alloc();
+	f->width = frame.width;
+	f->height = frame.height;
+	f->format = av_get_pix_fmt(frame.format);
+	f->color_range = (AVColorRange)av_color_range_from_name(frame.colorRange);
+	f->colorspace = (AVColorSpace)av_color_space_from_name(frame.colorSpace);
+	f->color_primaries = (AVColorPrimaries)av_color_primaries_from_name(frame.colorPrimaries);
+	f->color_trc = (AVColorTransferCharacteristic)av_color_transfer_from_name(frame.colorTrc);
 
 	// Fill each plane
-	for (int i = 0; i < planes; i++)
+	for (int i = 0; i < frame.planes; i++)
 	{
-		frame->data[i] = buffer[i];
-		frame->linesize[i] = rowsize[i];
+		f->data[i] = frame.buffer[i];
+		f->linesize[i] = frame.rowsize[i];
 	}
 
-	frame->pts = vPts = idx;
+	HRESULT hr = encoder->writeVideoFrame(f) == 0 ? S_OK : E_FAIL;
 
-	bool ret = encoder->writeVideoFrame(frame) == 0;
+	av_frame_free(&f);
 
-	av_frame_free(&frame);
-
-	return ret;
+	return hr;
 }
 
-STDMETHODIMP_(bool) CVoukoder::ShowVoukoderDialog(bool video, bool audio, HANDLE act_ctx, HINSTANCE instance)
+STDMETHODIMP CVoukoder::ShowVoukoderDialog(BOOL video, BOOL audio, BOOL* isOkay, HANDLE act_ctx, HINSTANCE instance)
 {
 	int result;
 
@@ -420,6 +550,8 @@ STDMETHODIMP_(bool) CVoukoder::ShowVoukoderDialog(bool video, bool audio, HANDLE
 
 	// Clean-up and return.
 	wxEntryCleanup();
+	
+	*isOkay = result == (int)wxID_OK;
 
-	return result == (int)wxID_OK;
+	return S_OK;
 }
